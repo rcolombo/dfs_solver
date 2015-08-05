@@ -14,15 +14,10 @@ import (
 )
 
 var (
-	AWSAccessKey = "AKIAIYDAIEFMMXKCOB3Q"
-	AWSSecretKey = "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"
-
-	cassandra   = flag.String("cassandra", "localhost", "Cassandra servers")
-	concurrency = flag.Int("c", 10, "Concurrency")
-	delimiter   = flag.String("delimiter", ",", "Field delimiter in input file")
-	file        = flag.String("file", "", "File with records to delete (Format: emd5,publisher,network,offer)")
-	iterations  = flag.Int("iterations", 100000000, "Random iterations to run")
-	numTeams    = flag.Int("n", 10, "Produce the top n teams")
+	delimiter  = flag.String("delimiter", ",", "Field delimiter in input file")
+	file       = flag.String("file", "", "File with records to delete (Format: emd5,publisher,network,offer)")
+	iterations = flag.Int("iterations", 100000000, "Random iterations to run")
+	numTeams   = flag.Int("n", 10, "Produce the top n teams")
 )
 
 type Player struct {
