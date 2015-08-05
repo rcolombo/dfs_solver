@@ -22,6 +22,7 @@ var (
 	delimiter   = flag.String("delimiter", ",", "Field delimiter in input file")
 	file        = flag.String("file", "", "File with records to delete (Format: emd5,publisher,network,offer)")
 	iterations  = flag.Int("iterations", 100000000, "Random iterations to run")
+	numTeams    = flag.Int("n", 10, "Produce the top n teams")
 )
 
 type Player struct {
@@ -43,6 +44,7 @@ type Team struct {
 	OF1     Player
 	OF2     Player
 	OF3     Player
+	Points  float64
 }
 
 func init() {
@@ -116,8 +118,8 @@ func main() {
 		}
 	}
 
-	maxScore := 0.0
-	bestTeam := Team{}
+	resultTeams := []Team{}
+	minScore := 0.0
 	for i := 0; i < *iterations; i++ {
 		ofIndexesUsed := make(map[int]bool)
 		rand.Seed(time.Now().UTC().UnixNano())
@@ -156,16 +158,17 @@ func main() {
 			OF3:     of[ofIdx3],
 		}
 
-		//eligibleTeams := []Team{}
 		teamSalary := t.salary()
-		teamPoints := t.points()
+		t.Points = t.points()
 		if teamSalary <= 35000 {
 			//eligibleTeams = append(eligibleTeams, t)
-			if teamPoints > maxScore && t.ValidTeam() {
-				maxScore = teamPoints
-				bestTeam = t
-				log.Println(bestTeam)
-				log.Println(maxScore)
+			if t.Points > minScore && t.ValidTeam() {
+				if len(resultTeams) >= *numTeams {
+					idx, min := getIndexAndScoreWorstTeam(resultTeams)
+					minScore = min
+					resultTeams = removeTeam(resultTeams, idx)
+				}
+				resultTeams = append(resultTeams, t)
 			}
 		}
 
@@ -173,12 +176,15 @@ func main() {
 			log.Println(fmt.Sprintf("Completed 10000 iterations [%v percent complete]", (float64(i)/float64(*iterations))*100.0))
 		}
 	}
-	log.Println(bestTeam)
+	for _, t := range resultTeams {
+		log.Println(t)
+		log.Println("\n")
+	}
 }
 
-func removePlayer(p []Player, idx int) []Player {
-	p = append(p[:idx], p[idx+1:]...)
-	return p
+func removeTeam(t []Team, idx int) []Team {
+	t = append(t[:idx], t[idx+1:]...)
+	return t
 }
 
 func (t *Team) salary() int {
@@ -219,4 +225,16 @@ func (t *Team) ValidTeam() bool {
 		}
 	}
 	return true
+}
+
+func getIndexAndScoreWorstTeam(teams []Team) (int, float64) {
+	var idx int
+	score := -1.0
+	for i, t := range teams {
+		if score == -1.0 || t.Points < score {
+			idx = i
+			score = t.Points
+		}
+	}
+	return idx, score
 }
