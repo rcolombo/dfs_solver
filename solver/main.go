@@ -7,6 +7,7 @@ import (
 	"log"
 	"math/rand"
 	"os"
+	"os/signal"
 	"runtime"
 	"strconv"
 	"strings"
@@ -14,10 +15,13 @@ import (
 )
 
 var (
-	delimiter  = flag.String("delimiter", ",", "Field delimiter in input file")
-	file       = flag.String("file", "", "File with records to delete (Format: emd5,publisher,network,offer)")
-	iterations = flag.Int("iterations", 100000000, "Random iterations to run")
-	numTeams   = flag.Int("n", 10, "Produce the top n teams")
+	delimiter   = flag.String("delimiter", ",", "Field delimiter in input file")
+	file        = flag.String("file", "", "File with records to delete (Format: emd5,publisher,network,offer)")
+	iterations  = flag.Int("iterations", 100000000, "Random iterations to run")
+	numTeams    = flag.Int("n", 10, "Produce the top n teams")
+	stackSize   = flag.Int("stacksize", 4, "Team must include a stack of this many players")
+	sigChan     = make(chan os.Signal, 1)
+	resultTeams = []Team{}
 )
 
 type Player struct {
@@ -49,6 +53,18 @@ func init() {
 	if *file == "" {
 		log.Fatal("Must provide a file")
 	}
+
+	signal.Notify(sigChan, os.Interrupt)
+	go func() {
+		for _ = range sigChan {
+			// Caught a ^C
+			for _, t := range resultTeams {
+				log.Println(t)
+				log.Println("\n")
+			}
+			os.Exit(0)
+		}
+	}()
 }
 
 func main() {
@@ -113,7 +129,6 @@ func main() {
 		}
 	}
 
-	resultTeams := []Team{}
 	minScore := 0.0
 	for i := 0; i < *iterations; i++ {
 		ofIndexesUsed := make(map[int]bool)
@@ -218,8 +233,11 @@ func (t *Team) ValidTeam() bool {
 		if v > 4 {
 			return false
 		}
+		if v == *stackSize {
+			return true
+		}
 	}
-	return true
+	return false
 }
 
 func getIndexAndScoreWorstTeam(teams []Team) (int, float64) {
