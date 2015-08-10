@@ -19,6 +19,12 @@ class RazzSpider(scrapy.Spider):
         self.start_urls = ['http://razzball.com/dfsbot-fanduel-pitch/?uid=1505&token=6eef511269ae262c13541abf93953e8e18bd9b7d15b1b9ea74bf4c86c5cb5818&time=1439075726&loadScript=true',
                 'http://razzball.com/dfsbot-fanduel-hit/?uid=1505&token=38c84d51c9e5e3b1a287c39d151ec6c3e6c91881c102655271ec3b67611ea7fd&time=1439085176&loadScript=true']
 
+        # If a player is not playing, they get removed. The update won't catch them so we clear it out beforehand
+        if self.update:
+            self.engine.execute(''' UPDATE players SET points = 0 ''')
+        else:
+            self.engine.execute(''' TRUNCATE players ''')
+
     def parse(self, response):
         header = response.xpath('//div[@id="content"]/article/header/h1/text()').extract()[0].lower()
 
