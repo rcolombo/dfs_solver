@@ -1,113 +1,68 @@
 package main
 
 import (
-	"bufio"
+	"database/sql"
 	"flag"
 	"fmt"
 	"log"
 	"math/rand"
 	"os"
-	"os/signal"
 	"runtime"
-	"strconv"
-	"strings"
+	"sort"
+	"sync"
 	"time"
+
+	_ "github.com/lib/pq"
 )
 
 var (
-	delimiter   = flag.String("delimiter", ",", "Field delimiter in input file")
-	file        = flag.String("file", "", "File with records to delete (Format: emd5,publisher,network,offer)")
-	iterations  = flag.Int("iterations", 100000000, "Random iterations to run")
-	numTeams    = flag.Int("n", 10, "Produce the top n teams")
+	dbstr    = flag.String("dbstr", "dbname=dfs sslmode=disable", "DB connection string")
+	poolsize = flag.Int("poolsize", 10, "DB connection pool size")
+	db       *sql.DB
+
 	stackSize   = flag.Int("stacksize", 4, "Team must include a stack of this many players")
+	concurrency = flag.Int("concurrency", 10, "Number of parallel workers")
 	sigChan     = make(chan os.Signal, 1)
 	resultTeams = []Team{}
 )
 
-type Player struct {
-	Name   string
-	Team   string
-	VsTeam string
-	Pos    string
-	Points float64
-	Price  int
-}
-
-type Team struct {
-	Pitcher Player
-	First   Player
-	Second  Player
-	Short   Player
-	Third   Player
-	Catcher Player
-	OF1     Player
-	OF2     Player
-	OF3     Player
-	Points  float64
-}
-
 func init() {
 	runtime.GOMAXPROCS(runtime.NumCPU())
 	flag.Parse()
+	initDb()
+}
 
-	if *file == "" {
-		log.Fatal("Must provide a file")
+func initDb() {
+	var (
+		err error
+		row string
+	)
+
+	if db, err = sql.Open("postgres", *dbstr); err != nil {
+		log.Println("Could not open database connection")
+		log.Fatal(err)
 	}
 
-	signal.Notify(sigChan, os.Interrupt)
-	go func() {
-		for _ = range sigChan {
-			// Caught a ^C
-			for _, t := range resultTeams {
-				log.Println(t)
-				log.Println("\n")
-			}
-			os.Exit(0)
-		}
-	}()
+	if err = db.QueryRow("SELECT 'OK'").Scan(&row); err != nil {
+		log.Println("Could not connect to database")
+		log.Println(*dbstr)
+		log.Fatal(err)
+	}
+
+	db.SetMaxIdleConns(*poolsize)
+	db.SetMaxOpenConns(*poolsize)
 }
 
 func main() {
-	pitcher := []Player{}
-	first := []Player{}
-	second := []Player{}
-	short := []Player{}
-	third := []Player{}
-	catcher := []Player{}
-	of := []Player{}
+	pitcher := []*Player{}
+	first := []*Player{}
+	second := []*Player{}
+	short := []*Player{}
+	third := []*Player{}
+	catcher := []*Player{}
+	of := []*Player{}
 
-	var scanner *bufio.Scanner
-
-	fh, err := os.Open(*file)
-	if err != nil {
-		log.Fatal("Unable to open file: ", err)
-	}
-	defer fh.Close()
-
-	scanner = bufio.NewScanner(fh)
-
-	for scanner.Scan() {
-		row := scanner.Text()
-		cols := strings.Split(row, *delimiter)
-
-		pts, err := strconv.ParseFloat(cols[4], 64)
-		if err != nil {
-			log.Fatal(err)
-		}
-
-		price, err := strconv.Atoi(cols[5])
-		if err != nil {
-			log.Fatal(err)
-		}
-
-		p := Player{
-			Name:   cols[0],
-			Team:   cols[1],
-			Pos:    cols[2],
-			VsTeam: strings.Replace(cols[3], "@", "", -1),
-			Points: pts,
-			Price:  price,
-		}
+	for _, p := range GetAllPlayers() {
 		switch p.Pos {
 		case "1B":
 			first = append(first, p)
@@ -129,125 +84,64 @@ func main() {
 		}
 	}
 
-	minScore := 0.0
-	for i := 0; i < *iterations; i++ {
-		ofIndexesUsed := make(map[int]bool)
-		rand.Seed(time.Now().UTC().UnixNano())
+	iterations := 0
+	wg := &sync.WaitGroup{}
+	for i := 0; i < *concurrency; i++ {
+		wg.Add(1)
+		go func() {
+			for {
+				ofIndexesUsed := make(map[int]bool)
+				rand.Seed(time.Now().UTC().UnixNano())
 
-		var ofIdx1, ofIdx2, ofIdx3 int
+				var ofIdx1, ofIdx2, ofIdx3 int
 
-		ofIdx1 = rand.Intn(len(of))
-		ofIndexesUsed[ofIdx1] = true
+				ofIdx1 = rand.Intn(len(of))
+				ofIndexesUsed[ofIdx1] = true
 
-		for {
-			ofIdx2 = rand.Intn(len(of))
-			if _, ok := ofIndexesUsed[ofIdx2]; ok {
-				continue
-			}
-			ofIndexesUsed[ofIdx2] = true
-			break
-		}
-
-		for {
-			ofIdx3 = rand.Intn(len(of))
-			if _, ok := ofIndexesUsed[ofIdx3]; ok {
-				continue
-			}
-			break
-		}
-
-		t := Team{
-			Pitcher: pitcher[rand.Intn(len(pitcher))],
-			First:   first[rand.Intn(len(first))],
-			Second:  second[rand.Intn(len(second))],
-			Short:   short[rand.Intn(len(short))],
-			Third:   third[rand.Intn(len(third))],
-			Catcher: catcher[rand.Intn(len(catcher))],
-			OF1:     of[ofIdx1],
-			OF2:     of[ofIdx2],
-			OF3:     of[ofIdx3],
-		}
-
-		teamSalary := t.salary()
-		t.Points = t.points()
-		if teamSalary <= 35000 {
-			//eligibleTeams = append(eligibleTeams, t)
-			if t.Points > minScore && t.ValidTeam() {
-				if len(resultTeams) >= *numTeams {
-					idx, min := getIndexAndScoreWorstTeam(resultTeams)
-					minScore = min
-					resultTeams = removeTeam(resultTeams, idx)
+				for {
+					ofIdx2 = rand.Intn(len(of))
+					if _, ok := ofIndexesUsed[ofIdx2]; ok {
+						continue
+					}
+					ofIndexesUsed[ofIdx2] = true
+					break
 				}
-				resultTeams = append(resultTeams, t)
+
+				for {
+					ofIdx3 = rand.Intn(len(of))
+					if _, ok := ofIndexesUsed[ofIdx3]; ok {
+						continue
+					}
+					break
+				}
+
+				outfielders := []*Player{of[ofIdx1], of[ofIdx2], of[ofIdx3]}
+				sort.Sort(ByPrice(outfielders))
+				t := Team{
+					Pitcher: pitcher[rand.Intn(len(pitcher))],
+					First:   first[rand.Intn(len(first))],
+					Second:  second[rand.Intn(len(second))],
+					Short:   short[rand.Intn(len(short))],
+					Third:   third[rand.Intn(len(third))],
+					Catcher: catcher[rand.Intn(len(catcher))],
+					OF1:     outfielders[0],
+					OF2:     outfielders[1],
+					OF3:     outfielders[2],
+				}
+
+				teamSalary := t.salary()
+				if teamSalary <= 35000 && teamSalary >= 34000 {
+					err := t.save()
+					if err != nil {
+						log.Println(err)
+					}
+				}
+				iterations += 1
+				if iterations%1000000 == 0 {
+					log.Println(fmt.Sprintf("Completed 100000 iterations [%v total]", iterations))
+				}
 			}
-		}
-
-		if i%1000000 == 0 {
-			log.Println(fmt.Sprintf("Completed 10000 iterations [%v percent complete]", (float64(i)/float64(*iterations))*100.0))
-		}
+		}()
 	}
-	for _, t := range resultTeams {
-		log.Println(t)
-		log.Println("\n")
-	}
-}
-
-func removeTeam(t []Team, idx int) []Team {
-	t = append(t[:idx], t[idx+1:]...)
-	return t
-}
-
-func (t *Team) salary() int {
-	var totalSalary int
-	for _, p := range []Player{t.Pitcher, t.First, t.Second, t.Short, t.Third, t.Catcher, t.OF1, t.OF2, t.OF3} {
-		totalSalary += p.Price
-	}
-
-	return totalSalary
-}
-
-func (t *Team) points() float64 {
-	var totalPoints float64
-	for _, p := range []Player{t.Pitcher, t.First, t.Second, t.Short, t.Third, t.Catcher, t.OF1, t.OF2, t.OF3} {
-		totalPoints += p.Points
-	}
-
-	return totalPoints
-}
-
-func (t *Team) ValidTeam() bool {
-	teamCounts := make(map[string]int)
-	for _, p := range []Player{t.Pitcher, t.First, t.Second, t.Short, t.Third, t.Catcher, t.OF1, t.OF2, t.OF3} {
-		// facing my starting pitcher
-		if p.Team == t.Pitcher.VsTeam {
-			return false
-		}
-		if _, ok := teamCounts[p.Team]; !ok {
-			teamCounts[p.Team] = 1
-		} else {
-			teamCounts[p.Team] += 1
-		}
-	}
-
-	for _, v := range teamCounts {
-		if v > 4 {
-			return false
-		}
-		if v == *stackSize {
-			return true
-		}
-	}
-	return false
-}
-
-func getIndexAndScoreWorstTeam(teams []Team) (int, float64) {
-	var idx int
-	score := -1.0
-	for i, t := range teams {
-		if score == -1.0 || t.Points < score {
-			idx = i
-			score = t.Points
-		}
-	}
-	return idx, score
+	wg.Wait()
 }
