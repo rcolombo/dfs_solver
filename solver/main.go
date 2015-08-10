@@ -16,12 +16,11 @@ import (
 )
 
 var (
-	dbstr    = flag.String("dbstr", "dbname=dfs sslmode=disable", "DB connection string")
-	poolsize = flag.Int("poolsize", 10, "DB connection pool size")
-	db       *sql.DB
+	dbstr = flag.String("dbstr", "dbname=dfs sslmode=disable", "DB connection string")
+	db    *sql.DB
 
 	stackSize   = flag.Int("stacksize", 4, "Team must include a stack of this many players")
-	concurrency = flag.Int("concurrency", 10, "Number of parallel workers")
+	concurrency = flag.Int("c", 10, "Number of parallel workers")
 	sigChan     = make(chan os.Signal, 1)
 	resultTeams = []Team{}
 )
@@ -49,8 +48,8 @@ func initDb() {
 		log.Fatal(err)
 	}
 
-	db.SetMaxIdleConns(*poolsize)
-	db.SetMaxOpenConns(*poolsize)
+	db.SetMaxIdleConns(*concurrency)
+	db.SetMaxOpenConns(*concurrency)
 }
 
 func main() {
