@@ -79,7 +79,7 @@ func (t *Team) points() float64 {
 	return totalPoints
 }
 
-func (t *Team) ValidTeam() bool {
+func (t *Team) Valid() bool {
 	teamCounts := make(map[string]int)
 	for _, p := range []*Player{t.Pitcher, t.First, t.Second, t.Short, t.Third, t.Catcher, t.OF1, t.OF2, t.OF3} {
 		// facing my starting pitcher

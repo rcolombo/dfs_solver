@@ -130,15 +130,15 @@ func main() {
 				}
 
 				teamSalary := t.salary()
-				if teamSalary <= 35000 && teamSalary >= 34000 {
+				if teamSalary <= 35000 && teamSalary >= 34000 && t.Valid() {
 					err := t.save()
 					if err != nil {
 						log.Println(err)
 					}
 				}
 				iterations += 1
-				if iterations%1000000 == 0 {
-					log.Println(fmt.Sprintf("Completed 100000 iterations [%v total]", iterations))
+				if iterations%10000000 == 0 {
+					log.Println(fmt.Sprintf("Completed 1MM iterations [%vB total]", (float64(iterations) / float64(1000000000))))
 				}
 			}
 		}()
