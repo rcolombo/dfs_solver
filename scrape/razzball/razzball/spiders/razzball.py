@@ -34,12 +34,14 @@ class RazzSpider(scrapy.Spider):
                 name = row.xpath('td[2]/a/text()').extract()[0]
                 team = row.xpath('td[4]/a/text()').extract()[0]
                 pos = row.xpath('td[5]/text()').extract()[0]
+                time = row.xpath('td[7]/text()').extract()[0]
                 vsteam = row.xpath('td[8]/text()').extract()[0]
                 pts = row.xpath('td[20]/text()').extract()[0]
                 price = row.xpath('td[22]/text()').extract()[0]
             else:
                 name = row.xpath('td[2]/a/text()').extract()[0]
                 team = row.xpath('td[3]/a/text()').extract()[0]
+                time = row.xpath('td[5]/text()').extract()[0]
                 pos = 'P'
                 vsteam = row.xpath('td[6]/text()').extract()[0]
                 pts = row.xpath('td[14]/text()').extract()[0]
@@ -49,5 +51,5 @@ class RazzSpider(scrapy.Spider):
                 q = ''' UPDATE players SET points = %s WHERE name = '%s' AND team = '%s' AND pos = '%s' AND price = %s '''
                 self.engine.execute(text(q % (pts, name, team, pos, price)))
             else:
-                q = ''' INSERT INTO players (name, team, pos, vs_team, points, price) VALUES ('%s', '%s', '%s', '%s', %s, %s) '''
-                self.engine.execute(text(q % (name, team, pos, vsteam, pts, price)))
+                q = ''' INSERT INTO players (name, team, pos, vs_team, points, price, time) VALUES ('%s', '%s', '%s', '%s', %s, %s, %s) '''
+                self.engine.execute(text(q % (name, team, pos, vsteam, pts, price, time)))

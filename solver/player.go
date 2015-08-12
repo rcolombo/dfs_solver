@@ -12,6 +12,7 @@ type Player struct {
 	Pos    string
 	Points float64
 	Price  int
+	Time   int
 }
 
 // ByPrice implements sort.Interface for []Player based on
@@ -24,7 +25,7 @@ func (a ByPrice) Less(i, j int) bool { return a[i].Price < a[j].Price }
 
 func GetAllPlayers() []*Player {
 	var q string
-	q = "SELECT id, name, team, vs_team, pos, points, price FROM players"
+	q = "SELECT id, name, team, vs_team, pos, points, price, time FROM players"
 	rows, err := db.Query(q)
 	if err != nil {
 		log.Println("Error getting players from the DB", err)
@@ -35,7 +36,7 @@ func GetAllPlayers() []*Player {
 	defer rows.Close()
 	for rows.Next() {
 		var p Player
-		if err := rows.Scan(&p.Id, &p.Name, &p.Team, &p.VsTeam, &p.Pos, &p.Points, &p.Price); err != nil {
+		if err := rows.Scan(&p.Id, &p.Name, &p.Team, &p.VsTeam, &p.Pos, &p.Points, &p.Price, &p.Time); err != nil {
 			log.Println("Error getting players from the DB")
 			return []*Player{}
 		}

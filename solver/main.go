@@ -21,6 +21,8 @@ var (
 
 	stackSize   = flag.Int("stacksize", 4, "Team must include a stack of this many players")
 	concurrency = flag.Int("c", 10, "Number of parallel workers")
+	maxGT       = flag.Int("maxgt", 24, "Max game time")
+	minGT       = flag.Int("mingt", -12, "Min game time")
 	sigChan     = make(chan os.Signal, 1)
 	resultTeams = []Team{}
 )
@@ -62,6 +64,9 @@ func main() {
 	of := []*Player{}
 
 	for _, p := range GetAllPlayers() {
+		if !(p.Time <= *maxGT && p.Time >= *minGT) {
+			continue
+		}
 		switch p.Pos {
 		case "1B":
 			first = append(first, p)
